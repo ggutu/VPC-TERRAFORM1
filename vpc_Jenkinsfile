@@ -1,58 +1,32 @@
 pipeline {
-    agent { node { label "terraform-node" } } 
-    parameters {
-                choice(name: 'deploy_choice', choices:['apply','destroy'],description:'The deployment type')
-                  }
-    environment {
-        EMAIL_TO = 'gizachoo@gmail.com'
-    }
+    agent any
+
     stages {
-        stage('Terraform init') {
+        stage('Clone Terraform Repo') {
             steps {
-                echo 'terraform init phase'
-                sh 'terraform init'
-            }
-        }
-        stage('Terraform plan') {
+                echo 'Hello World'
+                checkout([$class: 'GitSCM', branches: [[name: '*/main']], extensions: [], userRemoteConfigs: [[credentialsId: 'github', url: 'https://github.com/saha-rajdeep/devopscourse.git']]])
+        }}
+        stage('Terraform Provision') {
             steps {
-                echo 'terraform plan phase'
-                sh 'terraform plan'
+                sh """
+                    cd terraform
+                    terraform init
+                    terraform plan
+                    terraform apply --auto-approve
+                """
+                sh 'pwd'
             }
         }
-        stage('Manual Approval') {
-            input {
-                message "Should we proceed?"
-                ok "Yes, we should."
-                parameters{
-                    choice (name: 'Manual_Approval', choices: ['Approve','Reject'], description: 'Approve or Reject the deployment')
-                }
+        stage('Time to Kill?') {
+            steps {
+                input message: 'Destroy terraform resources?'
             }
-             steps {
-                echo "Deployment ${Manual_Approval}"
-            }          
         }
-        stage('Terraform Deploy') {              
-            steps { 
-                echo 'Terraform ${params.deploy_choice} phase'           
-                sh "terraform ${params.deploy_choice} --auto-approve"
+        stage('Search and Destroy') {
+            steps {
+                sh 'cd terraform; terraform destroy --auto-approve'
             }
-          }
-      }
-      post {
-        failure {
-            emailext body: 'Check console output at $BUILD_URL to view the results. \n\n ${CHANGES} \n\n -------------------------------------------------- \n${BUILD_LOG, maxLines=100, escapeHtml=false}', 
-                    to: "${EMAIL_TO}", 
-                    subject: 'Build failed in Jenkins: $PROJECT_NAME - #$BUILD_NUMBER'
         }
-        unstable {
-            emailext body: 'Check console output at $BUILD_URL to view the results. \n\n ${CHANGES} \n\n -------------------------------------------------- \n${BUILD_LOG, maxLines=100, escapeHtml=false}', 
-                    to: "${EMAIL_TO}", 
-                    subject: 'Unstable build in Jenkins: $PROJECT_NAME - #$BUILD_NUMBER'
-        }
-        changed {
-            emailext body: 'Check console output at $BUILD_URL to view the results.', 
-                    to: "${EMAIL_TO}", 
-                    subject: 'Jenkins build is back to normal: $PROJECT_NAME - #$BUILD_NUMBER'
-        }
-   }
-}   
+    }
+}
